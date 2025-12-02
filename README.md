@@ -8,7 +8,7 @@ A **Model Context Protocol (MCP)** server that enables AI assistants to manage d
 
 ## 🎯 Features
 
-- **Multi-Database Support**: SQLite (default) and PostgreSQL
+- **Multi-Database Support**: SQLite (default), PostgreSQL, and MySQL
 - **Raw SQL Migrations**: No ORM abstractions—write pure SQL
 - **UP/DOWN Convention**: Standard migration pattern with rollback support
 - **Drift Detection**: Checksum verification to detect modified migrations
@@ -24,11 +24,12 @@ A **Model Context Protocol (MCP)** server that enables AI assistants to manage d
 - Python 3.10+
 - `mcp` package
 - `psycopg2` (for PostgreSQL support)
+- `mysql-connector-python` (for MySQL support)
 
 ### Install Dependencies
 
 ```bash
-pip install mcp psycopg2-binary pydantic
+pip install mcp psycopg2-binary mysql-connector-python pydantic
 ```
 
 ### Clone and Setup
@@ -60,6 +61,17 @@ export MCP_PG_PORT=5432
 export MCP_PG_DATABASE=myapp
 export MCP_PG_USER=postgres
 export MCP_PG_PASSWORD=yourpassword
+export MCP_MIGRATIONS_DIR=./migrations
+```
+
+**MySQL:**
+```bash
+export MCP_DB_TYPE=mysql
+export MCP_MYSQL_HOST=localhost
+export MCP_MYSQL_PORT=3306
+export MCP_MYSQL_DATABASE=myapp
+export MCP_MYSQL_USER=root
+export MCP_MYSQL_PASSWORD=yourpassword
 export MCP_MIGRATIONS_DIR=./migrations
 ```
 
@@ -202,7 +214,7 @@ CREATE TABLE schema_migrations (
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `MCP_DB_TYPE` | `sqlite` | Database type: `sqlite` or `postgres` |
+| `MCP_DB_TYPE` | `sqlite` | Database type: `sqlite`, `postgres`, or `mysql` |
 | `MCP_DB_PATH` | `database.db` | SQLite database file path |
 | `MCP_MIGRATIONS_DIR` | `./migrations` | Directory for migration files |
 | `MCP_PG_HOST` | `localhost` | PostgreSQL host |
@@ -210,6 +222,11 @@ CREATE TABLE schema_migrations (
 | `MCP_PG_DATABASE` | `myapp` | PostgreSQL database name |
 | `MCP_PG_USER` | `postgres` | PostgreSQL username |
 | `MCP_PG_PASSWORD` | ` ` | PostgreSQL password |
+| `MCP_MYSQL_HOST` | `localhost` | MySQL host |
+| `MCP_MYSQL_PORT` | `3306` | MySQL port |
+| `MCP_MYSQL_DATABASE` | `myapp` | MySQL database name |
+| `MCP_MYSQL_USER` | `root` | MySQL username |
+| `MCP_MYSQL_PASSWORD` | ` ` | MySQL password |
 
 ## 🤝 Contributing
 
@@ -227,7 +244,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🗺️ Roadmap
 
-- [ ] MySQL/MariaDB support
+- [x] MySQL/MariaDB support
 - [ ] Migration dependencies/ordering
 - [ ] Seed data management
 - [ ] Schema diff between environments

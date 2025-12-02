@@ -9,6 +9,9 @@ pydantic>=2.0.0
 # PostgreSQL support (optional - only needed for PostgreSQL)
 psycopg2-binary>=2.9.0
 
+# MySQL support (optional - only needed for MySQL)
+mysql-connector-python>=8.0.0
+
 # Development dependencies (optional)
 # pytest>=7.0.0
 # black>=23.0.0

@@ -1,7 +1,7 @@
 """
 MCP Database Migration Server
 A Model Context Protocol server for managing database migrations with raw SQL.
-Supports SQLite and PostgreSQL databases.
+Supports SQLite, PostgreSQL, and MySQL databases.
 """
 
 import os
@@ -11,12 +11,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from abc import ABC, abstractmethod
 
 from mcp.server.fastmcp import FastMCP
 
+from adapters import DatabaseAdapter, SQLiteAdapter, PostgresAdapter, MySQLAdapter
+
 # --- CONFIGURATION ---
-DB_TYPE = os.getenv("MCP_DB_TYPE", "sqlite")  # "sqlite" or "postgres"
+DB_TYPE = os.getenv("MCP_DB_TYPE", "sqlite")  # "sqlite", "postgres", or "mysql"
 DB_PATH = os.getenv("MCP_DB_PATH", "database.db")  # For SQLite
 MIGRATIONS_DIR = os.getenv("MCP_MIGRATIONS_DIR", "./migrations")
 
@@ -27,195 +28,12 @@ PG_DATABASE = os.getenv("MCP_PG_DATABASE", "myapp")
 PG_USER = os.getenv("MCP_PG_USER", "postgres")
 PG_PASSWORD = os.getenv("MCP_PG_PASSWORD", "")
 
-
-# --- DATABASE ADAPTERS ---
-class DatabaseAdapter(ABC):
-    """Abstract base class for database adapters."""
-    
-    @abstractmethod
-    def connect(self):
-        """Return a database connection."""
-        pass
-    
-    @abstractmethod
-    def get_schema(self) -> str:
-        """Get the database schema as DDL."""
-        pass
-    
-    @abstractmethod
-    def inspect_table(self, table: str) -> Dict[str, Any]:
-        """Get detailed information about a specific table."""
-        pass
-    
-    @abstractmethod
-    def list_tables(self) -> List[Dict[str, Any]]:
-        """List all tables in the database."""
-        pass
-
-
-class SQLiteAdapter(DatabaseAdapter):
-    """SQLite database adapter."""
-    
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-    
-    def connect(self):
-        import sqlite3
-        return sqlite3.connect(self.db_path)
-    
-    def get_schema(self) -> str:
-        with self.connect() as conn:
-            rows = conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL"
-            ).fetchall()
-        return "\n\n".join([r[0] for r in rows])
-    
-    def inspect_table(self, table: str) -> Dict[str, Any]:
-        with self.connect() as conn:
-            # Get column info
-            columns = conn.execute(f"PRAGMA table_info({table})").fetchall()
-            col_info = [
-                {
-                    "name": c[1],
-                    "type": c[2],
-                    "nullable": not c[3],
-                    "default": c[4],
-                    "primary_key": bool(c[5])
-                }
-                for c in columns
-            ]
-            
-            # Get row count
-            row_count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            
-            # Get indexes
-            indexes = conn.execute(
-                f"SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='{table}'"
-            ).fetchall()
-            idx_info = [{"name": i[0], "definition": i[1]} for i in indexes if i[1]]
-            
-        return {
-            "table": table,
-            "row_count": row_count,
-            "columns": col_info,
-            "indexes": idx_info
-        }
-    
-    def list_tables(self) -> List[Dict[str, Any]]:
-        with self.connect() as conn:
-            tables = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            ).fetchall()
-            
-            result = []
-            for (table_name,) in tables:
-                col_count = len(conn.execute(f"PRAGMA table_info({table_name})").fetchall())
-                result.append({
-                    "table_name": table_name,
-                    "column_count": col_count
-                })
-        return result
-
-
-class PostgresAdapter(DatabaseAdapter):
-    """PostgreSQL database adapter."""
-    
-    def __init__(self, host: str, port: str, database: str, user: str, password: str):
-        self.config = {
-            "host": host,
-            "port": port,
-            "database": database,
-            "user": user,
-            "password": password
-        }
-    
-    def connect(self):
-        import psycopg2
-        return psycopg2.connect(**self.config)
-    
-    def get_schema(self) -> str:
-        # For PostgreSQL, we generate DDL from information_schema
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-                """)
-                tables = [r[0] for r in cur.fetchall()]
-                
-                ddl_statements = []
-                for table in tables:
-                    cur.execute("""
-                        SELECT column_name, data_type, is_nullable, column_default
-                        FROM information_schema.columns
-                        WHERE table_name = %s
-                        ORDER BY ordinal_position
-                    """, (table,))
-                    columns = cur.fetchall()
-                    
-                    col_defs = []
-                    for col in columns:
-                        col_def = f"  {col[0]} {col[1]}"
-                        if col[2] == 'NO':
-                            col_def += " NOT NULL"
-                        if col[3]:
-                            col_def += f" DEFAULT {col[3]}"
-                        col_defs.append(col_def)
-                    
-                    ddl = f"CREATE TABLE {table} (\n" + ",\n".join(col_defs) + "\n);"
-                    ddl_statements.append(ddl)
-                
-        return "\n\n".join(ddl_statements)
-    
-    def inspect_table(self, table: str) -> Dict[str, Any]:
-        from psycopg2.extras import RealDictCursor
-        
-        with self.connect() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Get columns
-                cur.execute("""
-                    SELECT column_name, data_type, is_nullable, column_default
-                    FROM information_schema.columns
-                    WHERE table_name = %s
-                    ORDER BY ordinal_position
-                """, (table,))
-                columns = [dict(row) for row in cur.fetchall()]
-                
-                # Get row count
-                cur.execute(f"SELECT COUNT(*) as count FROM {table}")
-                row_count = cur.fetchone()["count"]
-                
-                # Get indexes
-                cur.execute("""
-                    SELECT indexname as name, indexdef as definition
-                    FROM pg_indexes
-                    WHERE tablename = %s
-                """, (table,))
-                indexes = [dict(row) for row in cur.fetchall()]
-                
-        return {
-            "table": table,
-            "row_count": row_count,
-            "columns": columns,
-            "indexes": indexes
-        }
-    
-    def list_tables(self) -> List[Dict[str, Any]]:
-        from psycopg2.extras import RealDictCursor
-        
-        with self.connect() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT 
-                        t.table_name,
-                        (SELECT COUNT(*) FROM information_schema.columns c 
-                         WHERE c.table_name = t.table_name) as column_count
-                    FROM information_schema.tables t
-                    WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-                    ORDER BY t.table_name
-                """)
-                return [dict(row) for row in cur.fetchall()]
+# MySQL Configuration
+MYSQL_HOST = os.getenv("MCP_MYSQL_HOST", "localhost")
+MYSQL_PORT = os.getenv("MCP_MYSQL_PORT", "3306")
+MYSQL_DATABASE = os.getenv("MCP_MYSQL_DATABASE", "myapp")
+MYSQL_USER = os.getenv("MCP_MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MCP_MYSQL_PASSWORD", "")
 
 
 # --- MIGRATION ENGINE ---
@@ -361,14 +179,13 @@ class MigrationEngine:
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
-                cursor.executescript(sql_script) if hasattr(cursor, 'executescript') else cursor.execute(sql_script)
+                self.db.execute_script(cursor, sql_script)
                 
                 execution_time = int((datetime.now() - start_time).total_seconds() * 1000)
                 
+                placeholder = self.db.get_placeholder()
                 cursor.execute(
-                    "INSERT INTO schema_migrations (version, name, checksum, execution_time_ms) VALUES (?, ?, ?, ?)"
-                    if DB_TYPE == "sqlite" else
-                    "INSERT INTO schema_migrations (version, name, checksum, execution_time_ms) VALUES (%s, %s, %s, %s)",
+                    f"INSERT INTO schema_migrations (version, name, checksum, execution_time_ms) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})",
                     (version, migration["name"], migration["checksum"], execution_time)
                 )
                 conn.commit()
@@ -413,12 +230,11 @@ class MigrationEngine:
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
-                cursor.executescript(sql_script) if hasattr(cursor, 'executescript') else cursor.execute(sql_script)
+                self.db.execute_script(cursor, sql_script)
                 
+                placeholder = self.db.get_placeholder()
                 cursor.execute(
-                    "DELETE FROM schema_migrations WHERE version = ?"
-                    if DB_TYPE == "sqlite" else
-                    "DELETE FROM schema_migrations WHERE version = %s",
+                    f"DELETE FROM schema_migrations WHERE version = {placeholder}",
                     (version,)
                 )
                 conn.commit()
@@ -480,6 +296,8 @@ def create_adapter() -> DatabaseAdapter:
     """Create the appropriate database adapter based on configuration."""
     if DB_TYPE == "postgres":
         return PostgresAdapter(PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD)
+    elif DB_TYPE == "mysql":
+        return MySQLAdapter(MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD)
     else:
         return SQLiteAdapter(DB_PATH)
 
