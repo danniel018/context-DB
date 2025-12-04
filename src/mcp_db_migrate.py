@@ -4,16 +4,17 @@ A Model Context Protocol server for managing database migrations with raw SQL.
 Supports SQLite, PostgreSQL, and MySQL databases.
 """
 
-import os
 import glob
 import hashlib
 import json
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import Any
+
 from mcp.server.fastmcp import FastMCP
 
-from adapters import DatabaseAdapter, SQLiteAdapter, PostgresAdapter, MySQLAdapter
+from adapters import DatabaseAdapter, MySQLAdapter, PostgresAdapter, SQLiteAdapter
 
 # --- CONFIGURATION ---
 DB_TYPE = os.getenv("MCP_DB_TYPE", "sqlite")  # "sqlite", "postgres", or "mysql"
@@ -67,7 +68,7 @@ class MigrationEngine:
         """Calculate SHA256 checksum of migration content."""
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
-    def get_applied_migrations(self) -> List[Dict[str, Any]]:
+    def get_applied_migrations(self) -> list[dict[str, Any]]:
         """Get list of applied migrations with metadata."""
         with self.db.connect() as conn:
             cursor = conn.cursor()
@@ -89,7 +90,7 @@ class MigrationEngine:
             for r in rows
         ]
 
-    def get_available_migrations(self) -> List[Dict[str, Any]]:
+    def get_available_migrations(self) -> list[dict[str, Any]]:
         """Scan the migrations folder for .up.sql files."""
         if not self.migrations_dir.exists():
             return []
@@ -104,7 +105,7 @@ class MigrationEngine:
             version = parts[0]
             name = parts[1] if len(parts) > 1 else ""
 
-            with open(f, "r") as file:
+            with open(f) as file:
                 content = file.read()
 
             migrations.append(
@@ -120,12 +121,12 @@ class MigrationEngine:
 
         return migrations
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get comprehensive migration status."""
         applied_list = self.get_applied_migrations()
         applied_versions = {m["version"] for m in applied_list}
         available = self.get_available_migrations()
-        available_versions = {m["version"] for m in available}
+        #available_versions = {m["version"] for m in available}
 
         pending = [m for m in available if m["version"] not in applied_versions]
         applied = [m for m in available if m["version"] in applied_versions]
@@ -134,15 +135,17 @@ class MigrationEngine:
         applied_checksums = {m["version"]: m["checksum"] for m in applied_list}
         drift = []
         for m in applied:
-            if m["version"] in applied_checksums:
-                if m["checksum"] != applied_checksums[m["version"]]:
-                    drift.append(
-                        {
-                            "version": m["version"],
-                            "expected": applied_checksums[m["version"]],
-                            "actual": m["checksum"],
-                        }
-                    )
+            if (
+                m["version"] in applied_checksums
+                and m["checksum"] != applied_checksums[m["version"]]
+            ):
+                drift.append(
+                    {
+                        "version": m["version"],
+                        "expected": applied_checksums[m["version"]],
+                        "actual": m["checksum"],
+                    }
+                )
 
         return {
             "pending": pending,
@@ -151,7 +154,7 @@ class MigrationEngine:
             "current_version": applied_list[-1]["version"] if applied_list else None,
         }
 
-    def apply_migration(self, version: str, dry_run: bool = False) -> Dict[str, Any]:
+    def apply_migration(self, version: str, dry_run: bool = False) -> dict[str, Any]:
         """Apply a specific migration."""
         available = {m["version"]: m for m in self.get_available_migrations()}
 
@@ -165,7 +168,7 @@ class MigrationEngine:
             return {"success": False, "error": f"Migration {version} already applied"}
 
         # Read the SQL
-        with open(migration["path"], "r") as f:
+        with open(migration["path"]) as f:
             sql_script = f.read()
 
         if dry_run:
@@ -174,8 +177,7 @@ class MigrationEngine:
                 "dry_run": True,
                 "version": version,
                 "name": migration["name"],
-                "sql_preview": sql_script[:500]
-                + ("..." if len(sql_script) > 500 else ""),
+                "sql_preview": sql_script[:500] + ("..." if len(sql_script) > 500 else ""),
             }
 
         # Execute migration
@@ -185,9 +187,7 @@ class MigrationEngine:
                 cursor = conn.cursor()
                 self.db.execute_script(cursor, sql_script)
 
-                execution_time = int(
-                    (datetime.now() - start_time).total_seconds() * 1000
-                )
+                execution_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
                 placeholder = self.db.get_placeholder()
                 cursor.execute(
@@ -205,7 +205,7 @@ class MigrationEngine:
         except Exception as e:
             return {"success": False, "version": version, "error": str(e)}
 
-    def rollback_migration(self, version: str, dry_run: bool = False) -> Dict[str, Any]:
+    def rollback_migration(self, version: str, dry_run: bool = False) -> dict[str, Any]:
         """Rollback a specific migration using its .down.sql file."""
         available = {m["version"]: m for m in self.get_available_migrations()}
 
@@ -222,7 +222,7 @@ class MigrationEngine:
         if version not in applied_versions:
             return {"success": False, "error": f"Migration {version} is not applied"}
 
-        with open(down_path, "r") as f:
+        with open(down_path) as f:
             sql_script = f.read()
 
         if dry_run:
@@ -230,8 +230,7 @@ class MigrationEngine:
                 "success": True,
                 "dry_run": True,
                 "version": version,
-                "sql_preview": sql_script[:500]
-                + ("..." if len(sql_script) > 500 else ""),
+                "sql_preview": sql_script[:500] + ("..." if len(sql_script) > 500 else ""),
             }
 
         try:
@@ -255,8 +254,8 @@ class MigrationEngine:
             return {"success": False, "version": version, "error": str(e)}
 
     def create_migration(
-        self, name: str, up_sql: str, down_sql: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, name: str, up_sql: str, down_sql: str | None = None
+    ) -> dict[str, Any]:
         """Create a new migration file with auto-generated version number."""
         existing = self.get_available_migrations()
 
@@ -310,9 +309,7 @@ def create_adapter() -> DatabaseAdapter:
     if DB_TYPE == "postgres":
         return PostgresAdapter(PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD)
     elif DB_TYPE == "mysql":
-        return MySQLAdapter(
-            MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
-        )
+        return MySQLAdapter(MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD)
     else:
         return SQLiteAdapter(DB_PATH)
 
@@ -380,7 +377,7 @@ def migration_status() -> str:
 
 
 @mcp.tool()
-def list_pending_migrations() -> List[Dict[str, Any]]:
+def list_pending_migrations() -> list[dict[str, Any]]:
     """
     List all migrations that haven't been applied yet.
     Returns a list of pending migration objects with version, name, and checksum.
@@ -416,7 +413,7 @@ def read_migration_sql(version: str, direction: str = "up") -> str:
     path = migration["path"].replace(".up.sql", suffix)
 
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             return f.read()
     return f"File not found: {path}"
 
