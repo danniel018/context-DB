@@ -126,7 +126,7 @@ class MigrationEngine:
         applied_list = self.get_applied_migrations()
         applied_versions = {m["version"] for m in applied_list}
         available = self.get_available_migrations()
-        #available_versions = {m["version"] for m in available}
+        # available_versions = {m["version"] for m in available}
 
         pending = [m for m in available if m["version"] not in applied_versions]
         applied = [m for m in available if m["version"] in applied_versions]
@@ -364,6 +364,21 @@ def resource_current_schema() -> str:
 
 
 # --- TOOLS (Active Actions) ---
+
+
+@mcp.tool()
+def test_connection() -> str:
+    """
+    Test the database connection.
+    Returns JSON with success status or error message.
+    """
+    try:
+        with db_adapter.connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            return json.dumps({"success": True, "message": "Connection successful"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
 
 
 @mcp.tool()
