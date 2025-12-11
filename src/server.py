@@ -14,26 +14,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from config import CONFIG
+
 from .adapters import DatabaseAdapter, MySQLAdapter, PostgresAdapter, SQLiteAdapter
-
-# --- CONFIGURATION ---
-DB_TYPE = os.getenv("MCP_DB_TYPE", "sqlite")  # "sqlite", "postgres", or "mysql"
-DB_PATH = os.getenv("MCP_DB_PATH", "database.db")  # For SQLite
-MIGRATIONS_DIR = os.getenv("MCP_MIGRATIONS_DIR", "./migrations")
-
-# PostgreSQL Configuration
-PG_HOST = os.getenv("MCP_PG_HOST", "localhost")
-PG_PORT = os.getenv("MCP_PG_PORT", "5432")
-PG_DATABASE = os.getenv("MCP_PG_DATABASE", "myapp")
-PG_USER = os.getenv("MCP_PG_USER", "postgres")
-PG_PASSWORD = os.getenv("MCP_PG_PASSWORD", "")
-
-# MySQL Configuration
-MYSQL_HOST = os.getenv("MCP_MYSQL_HOST", "localhost")
-MYSQL_PORT = os.getenv("MCP_MYSQL_PORT", "3306")
-MYSQL_DATABASE = os.getenv("MCP_MYSQL_DATABASE", "myapp")
-MYSQL_USER = os.getenv("MCP_MYSQL_USER", "root")
-MYSQL_PASSWORD = os.getenv("MCP_MYSQL_PASSWORD", "")
 
 
 # --- MIGRATION ENGINE ---
@@ -306,16 +289,28 @@ class MigrationEngine:
 # --- INITIALIZE ENGINE ---
 def create_adapter() -> DatabaseAdapter:
     """Create the appropriate database adapter based on configuration."""
-    if DB_TYPE == "postgres":
-        return PostgresAdapter(PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD)
-    elif DB_TYPE == "mysql":
-        return MySQLAdapter(MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD)
+    if CONFIG["db_type"] == "postgres":
+        return PostgresAdapter(
+            CONFIG["db_host"],
+            CONFIG["db_port"],
+            CONFIG["db_database"],
+            CONFIG["db_user"],
+            CONFIG["db_password"],
+        )
+    elif CONFIG["db_type"] == "mysql":
+        return MySQLAdapter(
+            CONFIG["db_host"],
+            CONFIG["db_port"],
+            CONFIG["db_database"],
+            CONFIG["db_user"],
+            CONFIG["db_password"],
+        )
     else:
-        return SQLiteAdapter(DB_PATH)
+        return SQLiteAdapter(CONFIG["db_path"])
 
 
 db_adapter = create_adapter()
-engine = MigrationEngine(db_adapter, MIGRATIONS_DIR)
+engine = MigrationEngine(db_adapter, CONFIG["migrations_dir"])
 
 
 # --- MCP SERVER ---
@@ -335,7 +330,7 @@ def resource_migration_status() -> str:
 
     output = f"""DATABASE MIGRATION STATUS
 ========================
-Database Type: {DB_TYPE}
+Database Type: {CONFIG["db_type"]}
 Current Version: {status["current_version"] or "(none)"}
 Applied: {len(status["applied"])}
 Pending: {len(status["pending"])}
