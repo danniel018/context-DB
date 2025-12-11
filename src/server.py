@@ -14,9 +14,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from adapters import DatabaseAdapter, MySQLAdapter, PostgresAdapter, SQLiteAdapter
 from config import CONFIG
-
-from .adapters import DatabaseAdapter, MySQLAdapter, PostgresAdapter, SQLiteAdapter
 
 
 # --- MIGRATION ENGINE ---
