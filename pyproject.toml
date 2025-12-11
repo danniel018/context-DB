@@ -1,7 +1,7 @@
 [project]
 name = "context-db"
 version = "0.1.0"
-description = "Database migration and managment MCP"
+description = "AI-powered database migration and management via Model Context Protocol. Supports SQLite, PostgreSQL, and MySQL with raw SQL migrations, drift detection, and schema inspection."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
