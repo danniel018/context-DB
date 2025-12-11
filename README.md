@@ -29,7 +29,7 @@ A **Model Context Protocol (MCP)** server that enables AI assistants to manage d
 ### Install Dependencies
 
 ```bash
-pip install mcp psycopg2-binary mysql-connector-python pydantic
+pip install mcp pydantic psycopg2-binary mysql-connector-python
 ```
 
 ### Clone and Setup
@@ -44,58 +44,90 @@ pip install -r requirements.txt
 
 ### 1. Configure Your Database
 
-Set environment variables for your database:
+**Option A: Using .env file (Recommended)**
+
+Create a `.env` file in your project root with your database configuration:
 
 **SQLite (Default):**
+```bash
+MCP_DB_TYPE=sqlite
+MCP_DB_PATH=./my_database.db
+MCP_MIGRATIONS_DIR=./migrations
+```
+
+**PostgreSQL:**
+```bash
+MCP_DB_TYPE=postgres
+MCP_DB_HOST=localhost
+MCP_DB_PORT=5432
+MCP_DB_DATABASE=myapp
+MCP_DB_USER=postgres
+MCP_DB_PASSWORD=yourpassword
+MCP_MIGRATIONS_DIR=./migrations
+```
+
+**MySQL:**
+```bash
+MCP_DB_TYPE=mysql
+MCP_DB_HOST=localhost
+MCP_DB_PORT=3306
+MCP_DB_DATABASE=myapp
+MCP_DB_USER=root
+MCP_DB_PASSWORD=yourpassword
+MCP_MIGRATIONS_DIR=./migrations
+```
+
+> **Note:** Remember to add `.env` to your `.gitignore` file to avoid committing sensitive credentials.
+
+**Option B: Using environment variables**
+
+Alternatively, you can export environment variables directly:
+
 ```bash
 export MCP_DB_TYPE=sqlite
 export MCP_DB_PATH=./my_database.db
 export MCP_MIGRATIONS_DIR=./migrations
 ```
 
-**PostgreSQL:**
-```bash
-export MCP_DB_TYPE=postgres
-export MCP_PG_HOST=localhost
-export MCP_PG_PORT=5432
-export MCP_PG_DATABASE=myapp
-export MCP_PG_USER=postgres
-export MCP_PG_PASSWORD=yourpassword
-export MCP_MIGRATIONS_DIR=./migrations
-```
-
-**MySQL:**
-```bash
-export MCP_DB_TYPE=mysql
-export MCP_MYSQL_HOST=localhost
-export MCP_MYSQL_PORT=3306
-export MCP_MYSQL_DATABASE=myapp
-export MCP_MYSQL_USER=root
-export MCP_MYSQL_PASSWORD=yourpassword
-export MCP_MIGRATIONS_DIR=./migrations
-```
-
 ### 2. Run the Server
 
 ```bash
-python src/mcp_db_migrate.py
+python src/server.py
 ```
 
 ### 3. Connect Your AI Assistant
 
-Add to your MCP client configuration (e.g., Claude Desktop):
+**Claude Desktop:**
+
+Add to your Claude Desktop configuration file:
 
 ```json
 {
   "mcpServers": {
     "db-migrate": {
       "command": "python",
-      "args": ["path/to/src/mcp_db_migrate.py"],
+      "args": ["path/to/src/server.py"],
       "env": {
         "MCP_DB_TYPE": "sqlite",
         "MCP_DB_PATH": "./database.db",
         "MCP_MIGRATIONS_DIR": "./migrations"
       }
+    }
+  }
+}
+```
+
+**VS Code (Cline/Roo-Cline):**
+
+Create `.vscode/mcp.json` in the root of the project that will integrate the server:
+
+```json
+{
+  "servers": {
+    "db-migrate": {
+      "command": "python",
+      "args": ["path/to/server/src/server.py"],
+      "envFile": "${workspaceFolder}/.env"
     }
   }
 }
@@ -141,6 +173,7 @@ DROP TABLE IF EXISTS products;
 
 | Tool | Description |
 |------|-------------|
+| `test_connection` | Test the database connection |
 | `migration_status` | Get detailed status of all migrations |
 | `list_pending_migrations` | List migrations not yet applied |
 | `read_migration_sql` | Read the SQL content of a migration file |
@@ -217,46 +250,8 @@ CREATE TABLE schema_migrations (
 | `MCP_DB_TYPE` | `sqlite` | Database type: `sqlite`, `postgres`, or `mysql` |
 | `MCP_DB_PATH` | `database.db` | SQLite database file path |
 | `MCP_MIGRATIONS_DIR` | `./migrations` | Directory for migration files |
-| `MCP_PG_HOST` | `localhost` | PostgreSQL host |
-| `MCP_PG_PORT` | `5432` | PostgreSQL port |
-| `MCP_PG_DATABASE` | `myapp` | PostgreSQL database name |
-| `MCP_PG_USER` | `postgres` | PostgreSQL username |
-| `MCP_PG_PASSWORD` | ` ` | PostgreSQL password |
-| `MCP_MYSQL_HOST` | `localhost` | MySQL host |
-| `MCP_MYSQL_PORT` | `3306` | MySQL port |
-| `MCP_MYSQL_DATABASE` | `myapp` | MySQL database name |
-| `MCP_MYSQL_USER` | `root` | MySQL username |
-| `MCP_MYSQL_PASSWORD` | ` ` | MySQL password |
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🗺️ Roadmap
-
-- [x] MySQL/MariaDB support
-- [ ] Migration dependencies/ordering
-- [ ] Seed data management
-- [ ] Schema diff between environments
-- [ ] Migration squashing
-- [ ] CI/CD integration helpers
-- [ ] Web UI for migration management
-
-## 🙏 Acknowledgments
-
-- [Model Context Protocol](https://modelcontextprotocol.io) - The protocol that makes this possible
-- [FastMCP](https://github.com/jlowin/fastmcp) - Simplified MCP server creation
-
----
-
-**Built with ❤️ for the AI-assisted development community**
+| `MCP_DB_HOST` | `localhost` | Database host (PostgreSQL/MySQL) |
+| `MCP_DB_PORT` | ` ` | Database port (PostgreSQL/MySQL) |
+| `MCP_DB_DATABASE` | ` ` | Database name (PostgreSQL/MySQL) |
+| `MCP_DB_USER` | ` ` | Database username (PostgreSQL/MySQL) |
+| `MCP_DB_PASSWORD` | ` ` | Database password (PostgreSQL/MySQL) |
