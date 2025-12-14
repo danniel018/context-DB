@@ -195,6 +195,29 @@ Resources provide passive context for AI assistants:
 | `migrations://status` | Formatted migration status summary |
 | `migrations://schema` | Current database schema as DDL |
 
+## 🎯 Available Prompts
+
+Prompts are pre-configured templates that guide AI interactions:
+
+| Prompt Name | Description | Arguments |
+|------------|-------------|-----------|
+| `explain_migration` | Ask the LLM to explain a migration's purpose, changes, and impact | `version` - The migration version number (e.g., '001') |
+
+### Using Prompts
+
+Prompts provide structured context to help AI assistants explain and understand your migrations:
+
+```
+# In your AI assistant (Claude, etc.)
+Use the "explain_migration" prompt with version "001"
+```
+
+The prompt will automatically:
+- Load the UP and DOWN SQL for the migration
+- Show migration status (applied or pending)
+- Include execution metadata if applied
+- Guide the LLM to provide a comprehensive explanation
+
 ## 💬 Example AI Conversations
 
 ### Check Migration Status
@@ -221,6 +244,15 @@ The AI will use `inspect_schema` to display columns, types, and indexes.
 > "Check if any migration files have been modified"
 
 The AI will use `check_drift` to compare checksums.
+
+### Explain a Migration
+> "Explain migration 001 to me"
+
+The AI will use the `explain_migration` prompt to provide a detailed explanation of:
+- What the migration does
+- Database schema changes
+- Potential risks and considerations
+- Rollback strategy
 
 ## 🔒 Safety Features
 
