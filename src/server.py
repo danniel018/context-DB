@@ -623,6 +623,102 @@ def check_drift() -> str:
         )
 
 
+# --- PROMPTS (Guided AI Interactions) ---
+
+
+@mcp.prompt()
+def explain_migration(version: str) -> list[dict[str, Any]]:
+    """
+    Generate a prompt to ask the LLM to explain a migration's purpose and changes.
+
+    Args:
+        version: The version number (e.g., '001') or full version (e.g., '001_initial')
+
+    Returns:
+        A list of message objects for the LLM conversation.
+    """
+    available = engine.get_available_migrations()
+
+    # Find matching migration
+    migration = None
+    for m in available:
+        if m["version"] == version or m["full_version"] == version:
+            migration = m
+            break
+
+    if not migration:
+        return [
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": f"Migration {version} not found. Please check the version number.",
+                },
+            }
+        ]
+
+    # Read UP and DOWN migration SQL
+    up_sql = ""
+    down_sql = ""
+
+    up_path = migration["path"]
+    if os.path.exists(up_path):
+        with open(up_path) as f:
+            up_sql = f.read()
+
+    down_path = migration["path"].replace(".up.sql", ".down.sql")
+    if os.path.exists(down_path):
+        with open(down_path) as f:
+            down_sql = f.read()
+
+    # Check if migration is applied
+    applied_migrations = {m["version"]: m for m in engine.get_applied_migrations()}
+    is_applied = migration["version"] in applied_migrations
+
+    status_info = ""
+    if is_applied:
+        applied_info = applied_migrations[migration["version"]]
+        status_info = f"""
+Status: Applied
+Applied At: {applied_info["applied_at"]}
+Execution Time: {applied_info["execution_time_ms"]}ms
+"""
+    else:
+        status_info = "Status: Pending (not yet applied)"
+
+    # Create the prompt message
+    prompt_text = f"""Please explain this database migration in detail:
+
+Migration: {migration["full_version"]}
+Version: {migration["version"]}
+Name: {migration["name"]}
+{status_info}
+
+UP Migration SQL (applies the change):
+```sql
+{up_sql}
+```
+
+DOWN Migration SQL (rollback):
+```sql
+{down_sql if down_sql else "(No rollback script provided)"}
+```
+
+Please provide:
+1. A clear explanation of what this migration does
+2. The database schema changes being made
+3. Any potential risks or considerations
+4. The purpose of the rollback strategy (if provided)
+"""
+
+    return [
+        {
+            "role": "user",
+            "content": {"type": "text", "text": prompt_text},
+        }
+    ]
+
+
 # --- MAIN ---
 if __name__ == "__main__":
     mcp.run()
