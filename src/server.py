@@ -662,14 +662,20 @@ def explain_migration(version: str) -> list[dict[str, Any]]:
     down_sql = ""
 
     up_path = migration["path"]
-    if os.path.exists(up_path):
-        with open(up_path) as f:
-            up_sql = f.read()
+    try:
+        if os.path.exists(up_path):
+            with open(up_path, encoding="utf-8") as f:
+                up_sql = f.read()
+    except OSError:
+        up_sql = "(Error reading UP migration file)"
 
     down_path = migration["path"].replace(".up.sql", ".down.sql")
-    if os.path.exists(down_path):
-        with open(down_path) as f:
-            down_sql = f.read()
+    try:
+        if os.path.exists(down_path):
+            with open(down_path, encoding="utf-8") as f:
+                down_sql = f.read()
+    except OSError:
+        down_sql = "(Error reading DOWN migration file)"
 
     # Check if migration is applied
     applied_migrations = {m["version"]: m for m in engine.get_applied_migrations()}
