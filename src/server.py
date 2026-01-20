@@ -6,7 +6,6 @@ Supports SQLite, PostgreSQL, and MySQL databases.
 
 import glob
 import hashlib
-import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -361,28 +360,28 @@ def resource_current_schema() -> str:
 
 
 @mcp.tool()
-def test_connection() -> str:
+def test_connection() -> dict[str, Any]:
     """
     Test the database connection.
-    Returns JSON with success status or error message.
+    Returns dict with success status or error message.
     """
     try:
         with db_adapter.connect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
-            return json.dumps({"success": True, "message": "Connection successful"})
+            return {"success": True, "message": "Connection successful"}
     except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
-def migration_status() -> str:
+def migration_status() -> dict[str, Any]:
     """
     Get detailed migration status including pending, applied, and drift detection.
-    Returns JSON with comprehensive status information.
+    Returns dict with comprehensive status information.
     """
     status = engine.get_status()
-    return json.dumps(status, indent=2, default=str)
+    return status
 
 
 @mcp.tool()
@@ -428,7 +427,7 @@ def read_migration_sql(version: str, direction: str = "up") -> str:
 
 
 @mcp.tool()
-def apply_migration(version: str, dry_run: bool = False) -> str:
+def apply_migration(version: str, dry_run: bool = False) -> dict[str, Any]:
     """
     Apply a specific migration by version number.
 
@@ -437,14 +436,14 @@ def apply_migration(version: str, dry_run: bool = False) -> str:
         dry_run: If True, shows what would happen without making changes
 
     Returns:
-        JSON result with success status and details.
+        Dict with success status and details.
     """
     result = engine.apply_migration(version, dry_run)
-    return json.dumps(result, indent=2)
+    return result
 
 
 @mcp.tool()
-def apply_all_pending(dry_run: bool = False) -> str:
+def apply_all_pending(dry_run: bool = False) -> dict[str, Any]:
     """
     Apply all pending migrations in order.
 
@@ -452,7 +451,7 @@ def apply_all_pending(dry_run: bool = False) -> str:
         dry_run: If True, shows what would happen without making changes
 
     Returns:
-        JSON result with details of all applied migrations.
+        Dict with details of all applied migrations.
     """
     pending = engine.get_status()["pending"]
     results = []
@@ -463,19 +462,16 @@ def apply_all_pending(dry_run: bool = False) -> str:
         if not result["success"] and not dry_run:
             break
 
-    return json.dumps(
-        {
-            "total": len(pending),
-            "applied": len([r for r in results if r["success"]]),
-            "dry_run": dry_run,
-            "results": results,
-        },
-        indent=2,
-    )
+    return {
+        "total": len(pending),
+        "applied": len([r for r in results if r["success"]]),
+        "dry_run": dry_run,
+        "results": results,
+    }
 
 
 @mcp.tool()
-def rollback_migration(version: str, dry_run: bool = False) -> str:
+def rollback_migration(version: str, dry_run: bool = False) -> dict[str, Any]:
     """
     Rollback a specific migration using its .down.sql file.
 
@@ -484,30 +480,30 @@ def rollback_migration(version: str, dry_run: bool = False) -> str:
         dry_run: If True, shows what would happen without making changes
 
     Returns:
-        JSON result with success status and details.
+        Dict with success status and details.
     """
     result = engine.rollback_migration(version, dry_run)
-    return json.dumps(result, indent=2)
+    return result
 
 
 @mcp.tool()
-def rollback_last() -> str:
+def rollback_last() -> dict[str, Any]:
     """
     Rollback the most recently applied migration.
 
     Returns:
-        JSON result with success status and details.
+        Dict with success status and details.
     """
     status = engine.get_status()
     if not status["applied"]:
-        return json.dumps({"success": False, "error": "No migrations to rollback"})
+        return {"success": False, "error": "No migrations to rollback"}
 
     last = status["applied"][-1]
-    return json.dumps(engine.rollback_migration(last["version"]))
+    return engine.rollback_migration(last["version"])
 
 
 @mcp.tool()
-def create_migration(name: str, up_sql: str, down_sql: str = "") -> str:
+def create_migration(name: str, up_sql: str, down_sql: str = "") -> dict[str, Any]:
     """
     Create a new migration file with auto-generated version number.
 
@@ -517,14 +513,14 @@ def create_migration(name: str, up_sql: str, down_sql: str = "") -> str:
         down_sql: SQL to execute when rolling back (optional but recommended)
 
     Returns:
-        JSON result with created file paths.
+        Dict with created file paths.
     """
     result = engine.create_migration(name, up_sql, down_sql if down_sql else None)
-    return json.dumps(result, indent=2)
+    return result
 
 
 @mcp.tool()
-def inspect_schema(table: str = "") -> str:
+def inspect_schema(table: str = "") -> dict[str, Any]:
     """
     Inspect the database schema.
 
@@ -532,7 +528,7 @@ def inspect_schema(table: str = "") -> str:
         table: Specific table name to inspect. If empty, lists all tables.
 
     Returns:
-        JSON with schema information.
+        Dict with schema information.
     """
     if table:
         try:
@@ -545,11 +541,11 @@ def inspect_schema(table: str = "") -> str:
             "table_count": len(db_adapter.list_tables()),
         }
 
-    return json.dumps(result, indent=2, default=str)
+    return result
 
 
 @mcp.tool()
-def run_query(query: str) -> str:
+def run_query(query: str) -> dict[str, Any]:
     """
     Execute a read-only SQL query for inspection purposes.
     WARNING: For safety, DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE are blocked.
@@ -558,18 +554,16 @@ def run_query(query: str) -> str:
         query: SQL SELECT query to execute
 
     Returns:
-        Query results as JSON.
+        Query results as dict.
     """
     # Safety check
     dangerous = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "CREATE"]
     query_upper = query.upper()
     for keyword in dangerous:
         if keyword in query_upper:
-            return json.dumps(
-                {
-                    "error": f"Safety block: '{keyword}' statements not allowed. Use migrations for schema changes."
-                }
-            )
+            return {
+                "error": f"Safety block: '{keyword}' statements not allowed. Use migrations for schema changes."
+            }
 
     try:
         with db_adapter.connect() as conn:
@@ -579,48 +573,39 @@ def run_query(query: str) -> str:
             if cursor.description:
                 columns = [desc[0] for desc in cursor.description]
                 rows = cursor.fetchall()
-                return json.dumps(
-                    {
-                        "columns": columns,
-                        "rows": [list(row) for row in rows],
-                        "row_count": len(rows),
-                    },
-                    indent=2,
-                    default=str,
-                )
+                return {
+                    "columns": columns,
+                    "rows": [list(row) for row in rows],
+                    "row_count": len(rows),
+                }
             else:
-                return json.dumps({"message": "Query executed, no results returned"})
+                return {"message": "Query executed, no results returned"}
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return {"error": str(e)}
 
 
 @mcp.tool()
-def check_drift() -> str:
+def check_drift() -> dict[str, Any]:
     """
     Check for schema drift by comparing migration checksums.
     Detects if migration files have been modified after being applied.
 
     Returns:
-        JSON with drift detection results.
+        Dict with drift detection results.
     """
     status = engine.get_status()
 
     if status["drift_detected"]:
-        return json.dumps(
-            {
-                "drift_detected": True,
-                "message": "WARNING: Migration files have been modified after being applied!",
-                "details": status["drift_detected"],
-            },
-            indent=2,
-        )
+        return {
+            "drift_detected": True,
+            "message": "WARNING: Migration files have been modified after being applied!",
+            "details": status["drift_detected"],
+        }
     else:
-        return json.dumps(
-            {
-                "drift_detected": False,
-                "message": "No drift detected. All migration checksums match.",
-            }
-        )
+        return {
+            "drift_detected": False,
+            "message": "No drift detected. All migration checksums match.",
+        }
 
 
 # --- PROMPTS (Guided AI Interactions) ---
