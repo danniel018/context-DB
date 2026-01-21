@@ -6,7 +6,9 @@ Supports SQLite, PostgreSQL, and MySQL databases.
 
 import glob
 import hashlib
+import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,14 @@ from mcp.server.fastmcp import FastMCP
 
 from adapters import DatabaseAdapter, MySQLAdapter, PostgresAdapter, SQLiteAdapter
 from config import CONFIG
+
+# --- LOGGING CONFIGURATION ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stderr)],
+)
+logger = logging.getLogger("mcp-db-migrate")
 
 
 # --- MIGRATION ENGINE ---
@@ -32,6 +42,7 @@ class MigrationEngine:
 
     def _init_history_table(self):
         """Ensures the schema_migrations tracking table exists."""
+        logger.debug("Initializing schema_migrations table")
         with self.db.connect() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -44,6 +55,7 @@ class MigrationEngine:
                 )
             """)
             conn.commit()
+        logger.debug("schema_migrations table ready")
 
     def _calculate_checksum(self, content: str) -> str:
         """Calculate SHA256 checksum of migration content."""
@@ -163,6 +175,7 @@ class MigrationEngine:
 
         # Execute migration
         start_time = datetime.now()
+        logger.info(f"Applying migration {version}: {migration['name']}")
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
@@ -177,6 +190,7 @@ class MigrationEngine:
                 )
                 conn.commit()
 
+            logger.info(f"Migration {version} applied successfully in {execution_time}ms")
             return {
                 "success": True,
                 "version": version,
@@ -184,6 +198,7 @@ class MigrationEngine:
                 "execution_time_ms": execution_time,
             }
         except Exception as e:
+            logger.error(f"Migration {version} failed: {e}")
             return {"success": False, "version": version, "error": str(e)}
 
     def rollback_migration(self, version: str, dry_run: bool = False) -> dict[str, Any]:
@@ -214,6 +229,7 @@ class MigrationEngine:
                 "sql_preview": sql_script[:500] + ("..." if len(sql_script) > 500 else ""),
             }
 
+        logger.info(f"Rolling back migration {version}")
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
@@ -226,12 +242,14 @@ class MigrationEngine:
                 )
                 conn.commit()
 
+            logger.info(f"Migration {version} rolled back successfully")
             return {
                 "success": True,
                 "version": version,
                 "message": f"Rolled back {version}",
             }
         except Exception as e:
+            logger.error(f"Rollback of {version} failed: {e}")
             return {"success": False, "version": version, "error": str(e)}
 
     def create_migration(
@@ -287,7 +305,11 @@ class MigrationEngine:
 # --- INITIALIZE ENGINE ---
 def create_adapter() -> DatabaseAdapter:
     """Create the appropriate database adapter based on configuration."""
-    if CONFIG["db_type"] == "postgres":
+    db_type = CONFIG["db_type"]
+    logger.info(f"Initializing database adapter: {db_type}")
+
+    if db_type == "postgres":
+        logger.debug(f"Connecting to PostgreSQL at {CONFIG['db_host']}:{CONFIG['db_port']}")
         return PostgresAdapter(
             CONFIG["db_host"],
             CONFIG["db_port"],
@@ -295,7 +317,8 @@ def create_adapter() -> DatabaseAdapter:
             CONFIG["db_user"],
             CONFIG["db_password"],
         )
-    elif CONFIG["db_type"] == "mysql":
+    elif db_type == "mysql":
+        logger.debug(f"Connecting to MySQL at {CONFIG['db_host']}:{CONFIG['db_port']}")
         return MySQLAdapter(
             CONFIG["db_host"],
             CONFIG["db_port"],
@@ -304,11 +327,13 @@ def create_adapter() -> DatabaseAdapter:
             CONFIG["db_password"],
         )
     else:
+        logger.debug(f"Using SQLite database: {CONFIG['db_path']}")
         return SQLiteAdapter(CONFIG["db_path"])
 
 
 db_adapter = create_adapter()
 engine = MigrationEngine(db_adapter, CONFIG["migrations_dir"])
+logger.info(f"Migration engine initialized with migrations dir: {CONFIG['migrations_dir']}")
 
 
 # --- MCP SERVER ---
@@ -362,12 +387,15 @@ def test_connection() -> dict[str, Any]:
     Test the database connection.
     Returns dict with success status or error message.
     """
+    logger.debug("Testing database connection")
     try:
         with db_adapter.connect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
+            logger.info("Database connection test successful")
             return {"success": True, "message": "Connection successful"}
     except Exception as e:
+        logger.error(f"Database connection test failed: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -558,10 +586,14 @@ def run_query(query: str) -> dict[str, Any]:
     query_upper = query.upper()
     for keyword in dangerous:
         if keyword in query_upper:
+            logger.warning(f"Blocked dangerous query containing '{keyword}'")
             return {
                 "error": f"Safety block: '{keyword}' statements not allowed. Use migrations for schema changes."
             }
 
+    logger.debug(
+        f"Executing query: {query[:100]}..." if len(query) > 100 else f"Executing query: {query}"
+    )
     try:
         with db_adapter.connect() as conn:
             cursor = conn.cursor()
@@ -709,4 +741,5 @@ Please provide:
 
 # --- MAIN ---
 if __name__ == "__main__":
+    logger.info("Starting MCP Database Migration Server")
     mcp.run()
