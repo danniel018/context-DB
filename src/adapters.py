@@ -3,8 +3,11 @@ Database Adapters for MCP Database Migration Server.
 Provides abstract base class and concrete implementations for SQLite, PostgreSQL, and MySQL.
 """
 
+import sqlite3
 from abc import ABC, abstractmethod
 from typing import Any
+
+import psycopg2
 
 
 class DatabaseAdapter(ABC):
@@ -48,8 +51,6 @@ class SQLiteAdapter(DatabaseAdapter):
         self.db_path = db_path
 
     def connect(self):
-        import sqlite3
-
         return sqlite3.connect(self.db_path)
 
     def get_schema(self) -> str:
@@ -79,7 +80,7 @@ class SQLiteAdapter(DatabaseAdapter):
 
             # Get indexes
             indexes = conn.execute(
-                f"SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='{table}'"
+                "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name= ?", (table,)
             ).fetchall()
             idx_info = [{"name": i[0], "definition": i[1]} for i in indexes if i[1]]
 
@@ -117,8 +118,6 @@ class PostgresAdapter(DatabaseAdapter):
         }
 
     def connect(self):
-        import psycopg2
-
         return psycopg2.connect(**self.config)
 
     def get_schema(self) -> str:
@@ -175,7 +174,7 @@ class PostgresAdapter(DatabaseAdapter):
             columns = [dict(row) for row in cur.fetchall()]
 
             # Get row count
-            cur.execute(f"SELECT COUNT(*) as count FROM {table}")
+            cur.execute("SELECT COUNT(*) as count FROM %s", (table,))
             row_count = cur.fetchone()["count"]
 
             # Get indexes
@@ -269,7 +268,7 @@ class MySQLAdapter(DatabaseAdapter):
             columns = [dict(row) for row in cursor.fetchall()]
 
             # Get row count
-            cursor.execute(f"SELECT COUNT(*) as count FROM `{table}`")
+            cursor.execute("SELECT COUNT(*) as count FROM %s" , (table,))
             row_count = cursor.fetchone()["count"]
 
             # Get indexes
