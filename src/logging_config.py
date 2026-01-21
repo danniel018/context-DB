@@ -22,4 +22,4 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler(sys.stderr)],
     )
-    return logging.getLogger("mcp-db-migrate")
+    return logging.getLogger("mcp-context-db")
