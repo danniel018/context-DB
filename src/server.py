@@ -312,10 +312,7 @@ engine = MigrationEngine(db_adapter, CONFIG["migrations_dir"])
 
 
 # --- MCP SERVER ---
-mcp = FastMCP(
-    "db-migrate",
-    # description="MCP Server for database migrations and schema management"
-)
+mcp = FastMCP("Context-DB")
 
 
 # --- RESOURCES (Passive Context for AI) ---

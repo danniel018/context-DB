@@ -268,7 +268,7 @@ class MySQLAdapter(DatabaseAdapter):
             columns = [dict(row) for row in cursor.fetchall()]
 
             # Get row count
-            cursor.execute("SELECT COUNT(*) as count FROM %s" , (table,))
+            cursor.execute("SELECT COUNT(*) as count FROM %s", (table,))
             row_count = cursor.fetchone()["count"]
 
             # Get indexes
